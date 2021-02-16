@@ -37,16 +37,16 @@ reify_reflect(Head,clause(P/N,Args,[])) :-
  * reify_reflect_goal(+,-) is det.
  * reify_reflect_goal(-,+) is det.
  */
-reify_reflect_goal(X, X) :-
+reify_reflect_term(X, X) :-
     var(X),
     !.
-reify_reflect_goal(X, integer(X)) :-
+reify_reflect_term(X, integer(X)) :-
     integer(X),
     !.
-reify_reflect_goal(X, float(X)) :-
+reify_reflect_term(X, float(X)) :-
     float(X),
     !.
-reify_reflect_goal(Functor, lambda(Free,Bound,Goal)) :-
+reify_reflect_term(Functor, lambda(Free,Bound,Goal)) :-
     when((   nonvar(Functor)
          ;   nonvar(F)),
          Functor =.. [F,Args,Goal]),
@@ -54,10 +54,30 @@ reify_reflect_goal(Functor, lambda(Free,Bound,Goal)) :-
     free(Args, Free),
     bound(Args, Bound),
     !.
-reify_reflect_goal(Functor, functor(Symbol/N,Reflect_Args)) :-
+reify_reflect_term(Functor, functor(Symbol/N,Reflect_Args)) :-
     Functor =.. [Symbol|Reify_Args],
     length(Reify_Args,N),
-    maplist(reify_reflect_goal,Reify_Args,Reflect_Args).
+    maplist(reify_reflect_term,Reify_Args,Reflect_Args).
+
+reify_reflect_goal((!), cut) :-
+    !.
+reify_reflect_goal((A,B), (RA,RB)) :-
+    !,
+    reify_reflect_goal(A, RA),
+    reify_reflect_goal(B, RB).
+reify_reflect_goal((A,B), (A,B)) :-
+    !,
+    reify_reflect_goal(A, RA),
+    reify_reflect_goal(B, RB).
+reify_reflect_goal(Functor, call(Goal,Args)) :-
+    Functor =.. [call|Args],
+    !.
+    maplist(reify_reflect_term,Reify_Args,Reflect_Args).
+reify_reflect_goal(Functor, functor(Symbol/N,Reflect_Args)) :-
+    Functor =.. [Symbol|Reify_Args],
+    % \+ member(Symbol, [!,',',';', 'call']),
+    length(Reify_Args,N),
+    maplist(reify_reflect_term,Reify_Args,Reflect_Args).
 
 free(_Bound, []).
 free({Free}/[], [Free]) :-
@@ -94,10 +114,12 @@ unfix_vars(functor(F,L),float(F,M)) -->
 unfix_vars(lambda(FreeX, BoundX, GoalX),lambda(FreeY, BoundY, GoalY)) -->
     {throw(error(unimplemented))}.
 
-extend(X, R, Env, [v(X)-R|Env]).
+extend(X, R) -->
+    update(enviornment, Env, [X-R|Env]).
 
-lookup(Y, R, Env, Env) :-
-    memberchk(v(Y)-R, Env).
+lookup(Y, R) -->
+    view(environment, Env),
+    { memberchk(Y-R, Env) }.
 
 unify(var(X), var(Y)) -->
     (   lookup(Y,R)
